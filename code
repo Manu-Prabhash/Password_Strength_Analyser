@@ -1,0 +1,224 @@
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+import itertools
+from zxcvbn import zxcvbn
+
+class ModernPassTool:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Password Security Suite")
+        self.root.geometry("650x550")
+        self.root.resizable(False, False)
+
+    
+        self.style = ttk.Style()
+        self.style.theme_use('clam')
+        
+        # Color Palette
+        self.colors = {
+            "bg": "#f9f9f9",
+            "primary": "#3b8ed0",  
+            "danger": "#e04f5f",   
+            "success": "#2fa572",  
+            "text": "#333333",
+            "subtext": "#666666"
+        }
+        
+        self.root.configure(bg=self.colors["bg"])
+        
+        # Element Styles
+        self.style.configure(".", background=self.colors["bg"], foreground=self.colors["text"], font=("Segoe UI", 10))
+        self.style.configure("TNotebook", background=self.colors["bg"], borderwidth=0)
+        self.style.configure("TNotebook.Tab", padding=[20, 10], font=("Segoe UI", 11, "bold"))
+        self.style.map("TNotebook.Tab", background=[("selected", self.colors["primary"])], foreground=[("selected", "white")])
+        
+        self.style.configure("Card.TFrame", background="white", relief="raised", borderwidth=1)
+        self.style.configure("Action.TButton", font=("Segoe UI", 10, "bold"), padding=10)
+        
+        # --- Layout ---
+        self.tab_control = ttk.Notebook(root)
+        self.tab_analyze = ttk.Frame(self.tab_control)
+        self.tab_generate = ttk.Frame(self.tab_control)
+        
+        self.tab_control.add(self.tab_analyze, text='  🛡️ Analyzer  ')
+        self.tab_control.add(self.tab_generate, text='  ⚙️ Generator  ')
+        self.tab_control.pack(expand=1, fill="both", padx=10, pady=10)
+
+        self.setup_analyzer()
+        self.setup_generator()
+
+    
+    def setup_analyzer(self):
+        # Container
+        frame = ttk.Frame(self.tab_analyze, padding=30)
+        frame.pack(fill="both", expand=True)
+
+        # Header
+        ttk.Label(frame, text="Password Strength Audit", font=("Segoe UI", 16, "bold")).pack(anchor="w", pady=(0, 20))
+
+       
+        input_frame = ttk.Frame(frame)
+        input_frame.pack(fill="x")
+
+        ttk.Label(input_frame, text="Target Password:", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        
+        self.pwd_entry = ttk.Entry(input_frame, font=("Consolas", 12), show="•")
+        self.pwd_entry.pack(fill="x", pady=5)
+
+     
+        ctrl_frame = ttk.Frame(frame)
+        ctrl_frame.pack(fill="x", pady=10)
+        
+        self.show_var = tk.BooleanVar()
+        ttk.Checkbutton(ctrl_frame, text="Reveal Characters", variable=self.show_var, command=self.toggle_visibility).pack(side="left")
+        
+        ttk.Button(ctrl_frame, text="Analyze", style="Action.TButton", command=self.analyze).pack(side="right", padx=5)
+        ttk.Button(ctrl_frame, text="🗑️ Clear", command=self.clear_fields).pack(side="right")
+
+      
+        ttk.Label(frame, text="Security Score:", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(20, 5))
+        self.progress = ttk.Progressbar(frame, orient="horizontal", length=100, mode="determinate")
+        self.progress.pack(fill="x", pady=(0, 10))
+
+        # Results Display
+        self.result_card = ttk.Frame(frame, style="Card.TFrame", padding=15)
+        self.result_card.pack(fill="both", expand=True)
+        
+        self.lbl_score = ttk.Label(self.result_card, text="Waiting for input...", font=("Segoe UI", 12), background="white")
+        self.lbl_score.pack(anchor="w")
+        
+        self.lbl_details = ttk.Label(self.result_card, text="", background="white", foreground=self.colors["subtext"], wraplength=500)
+        self.lbl_details.pack(anchor="w", pady=10)
+
+    def toggle_visibility(self):
+        self.pwd_entry.config(show="" if self.show_var.get() else "•")
+
+    def clear_fields(self):
+        self.pwd_entry.delete(0, tk.END)
+        self.lbl_score.config(text="Waiting for input...", foreground=self.colors["text"])
+        self.lbl_details.config(text="")
+        self.progress['value'] = 0
+        self.root.clipboard_clear() 
+
+    def analyze(self):
+        pwd = self.pwd_entry.get()
+        if not pwd: return
+
+        res = zxcvbn(pwd)
+        score = res
+        
+        # Visual Mapping
+        score_map = {
+            0: (10, self.colors["danger"], "Very Weak"),
+            1: (30, self.colors["danger"], "Weak"),
+            2: (50, "#fbc02d", "Moderate"), # Yellow
+            3: (75, self.colors["success"], "Strong"),
+            4: (100, self.colors["success"], "Very Strong")
+        }
+        
+        val, color, text = score_map[score]
+        
+        
+        self.style.configure("Horizontal.TProgressbar", background=color)
+        self.progress['value'] = val
+        self.lbl_score.config(text=f"Result: {text} ({score}/4)", foreground=color, font=("Segoe UI", 14, "bold"))
+        
+        guesses = res['guesses']
+        crack_time = res['crack_times_display']['offline_slow_hashing_1e4_per_second']
+        warning = res['feedback']['warning'] or "None"
+        suggestions = "\n".join(res['feedback']['suggestions']) or "No specific suggestions."
+
+        detail_text = (
+            f"📉 Estimated Guesses: {guesses}\n"
+            f"⏳ Time to Crack (Offline): {crack_time}\n\n"
+            f"⚠️ Warning: {warning}\n"
+            f"💡 Suggestions: {suggestions}"
+        )
+        self.lbl_details.config(text=detail_text)
+
+    
+    def setup_generator(self):
+        frame = ttk.Frame(self.tab_generate, padding=30)
+        frame.pack(fill="both", expand=True)
+
+        ttk.Label(frame, text="Custom Wordlist Creator", font=("Segoe UI", 16, "bold")).pack(anchor="w", pady=(0, 20))
+        
+        # Input
+        ttk.Label(frame, text="Base Keywords (comma separated):", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        ttk.Label(frame, text="e.g. John, Rover, 1990, Tesla", foreground=self.colors["subtext"]).pack(anchor="w", pady=(0, 5))
+        
+        self.keywords_entry = ttk.Entry(frame, font=("Segoe UI", 11))
+        self.keywords_entry.pack(fill="x", pady=5)
+
+        opt_frame = ttk.LabelFrame(frame, text="Configuration", padding=15)
+        opt_frame.pack(fill="x", pady=20)
+        
+        self.var_leet = tk.BooleanVar(value=True)
+        self.var_years = tk.BooleanVar(value=True)
+        self.var_special = tk.BooleanVar(value=False)
+        
+        ttk.Checkbutton(opt_frame, text="Apply Leetspeak (e.g. e -> 3)", variable=self.var_leet).pack(anchor="w", pady=2)
+        ttk.Checkbutton(opt_frame, text="Append Common Years (2023, 2024...)", variable=self.var_years).pack(anchor="w", pady=2)
+        ttk.Checkbutton(opt_frame, text="Append Special Chars (!, #, @)", variable=self.var_special).pack(anchor="w", pady=2)
+
+        
+        self.status_lbl = ttk.Label(frame, text="Ready", anchor="center", foreground=self.colors["subtext"])
+        self.status_lbl.pack(side="bottom", pady=10)
+        
+        ttk.Button(frame, text="💾 Generate & Export .txt", style="Action.TButton", command=self.generate).pack(side="bottom", fill="x", pady=10)
+
+    def generate(self):
+        raw = self.keywords_entry.get()
+        if not raw.strip():
+            messagebox.showwarning("Input Required", "Please enter keywords first.")
+            return
+            
+        keywords = [k.strip() for k in raw.split(',') if k.strip()]
+        final_list = set()
+        
+
+        for i in range(1, len(keywords) + 1):
+            for combo in itertools.permutations(keywords, i):
+                base = "".join(combo)
+                final_list.add(base)
+                final_list.add(base.lower())
+                final_list.add(base.title())
+                
+                if self.var_leet.get():
+                    final_list.add(self.apply_leet(base))
+
+       
+        temp_list = list(final_list)
+        suffixes = []
+        
+        if self.var_years.get():
+            suffixes.extend(["2023", "2024", "2025", "1", "123"])
+            
+        if self.var_special.get():
+            suffixes.extend(["!", "@", "#", "$", "_"])
+
+        if suffixes:
+            for word in temp_list:
+                for s in suffixes:
+                    final_list.add(f"{word}{s}")
+                    final_list.add(f"{word}_{s}")
+
+        
+        filepath = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text Files", "*.txt")])
+        if filepath:
+            try:
+                with open(filepath, "w") as f:
+                    for w in sorted(final_list):
+                        f.write(f"{w}\n")
+                self.status_lbl.config(text=f"✅ Success! {len(final_list)} words saved.", foreground=self.colors["success"])
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
+    def apply_leet(self, text):
+        subs = {'a': '@', 'e': '3', 'i': '1', 'o': '0', 's': '$', 't': '7'}
+        return "".join([subs.get(c, c) for c in text.lower()])
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = ModernPassTool(root)
+    root.mainloop()
